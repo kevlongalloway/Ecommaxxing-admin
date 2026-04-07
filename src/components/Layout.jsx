@@ -1,6 +1,7 @@
 import React from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { ShoppingBag, Package, LayoutDashboard } from 'lucide-react'
+import { ShoppingBag, Package, LogOut } from 'lucide-react'
+import { useAuth } from '../context/AuthContext.jsx'
 
 const navItems = [
   { to: '/products', label: 'Products', icon: Package },
@@ -8,6 +9,7 @@ const navItems = [
 
 export default function Layout() {
   const location = useLocation()
+  const { logout } = useAuth()
 
   // Derive page title from current path
   const getPageTitle = () => {
@@ -52,8 +54,14 @@ export default function Layout() {
         </nav>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-white/10">
-          <p className="text-xs text-gray-500">Admin Panel v1.0</p>
+        <div className="px-3 py-4 border-t border-white/10">
+          <button
+            onClick={logout}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-400 hover:bg-white/10 hover:text-white transition-colors w-full"
+          >
+            <LogOut className="w-4 h-4 flex-shrink-0" />
+            Sign out
+          </button>
         </div>
       </aside>
 

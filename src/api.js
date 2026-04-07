@@ -9,13 +9,13 @@ export class AdminApiError extends Error {
 
 async function adminFetch(path, options = {}) {
   const baseUrl = import.meta.env.VITE_API_BASE_URL
-  const apiKey = import.meta.env.VITE_ADMIN_API_KEY
+  const token = localStorage.getItem('admin_token')
 
   const url = `${baseUrl}${path}`
 
   const headers = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${apiKey}`,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers || {}),
   }
 
@@ -23,6 +23,12 @@ async function adminFetch(path, options = {}) {
     ...options,
     headers,
   })
+
+  if (response.status === 401) {
+    localStorage.removeItem('admin_token')
+    localStorage.removeItem('admin_token_expires')
+    window.dispatchEvent(new Event('auth:logout'))
+  }
 
   if (!response.ok) {
     let details = null
@@ -50,6 +56,29 @@ async function adminFetch(path, options = {}) {
 }
 
 export const api = {
+  login: async (username, password) => {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL
+    const response = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
+    let data = null
+    try {
+      data = await response.json()
+    } catch {
+      // ignore parse errors
+    }
+    if (!response.ok) {
+      throw new AdminApiError(
+        data?.message || data?.error || 'Login failed',
+        response.status,
+        data,
+      )
+    }
+    return data
+  },
+
   listProducts: (params = {}) =>
     adminFetch(`/admin/products?${new URLSearchParams(params)}`),
 
