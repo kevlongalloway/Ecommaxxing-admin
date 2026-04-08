@@ -61,7 +61,7 @@ async function adminFetch(path, options = {}) {
 // ── Auth ───────────────────────────────────────────────────────────────────
 
 export async function login(username, password) {
-  const res = await fetch(`${getBaseUrl()}/auth/login`, {
+  const res = await fetch(`${getBaseUrl()}/admin/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
