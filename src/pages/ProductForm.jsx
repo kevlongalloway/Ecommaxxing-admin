@@ -2,8 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { ChevronRight, Plus, X, Save, Trash2, ExternalLink } from 'lucide-react'
 import { api } from '../api.js'
-import { formatPrice, parsePriceInput } from '../utils.js'
+import { formatPrice, parsePriceInput, calculateProductStock } from '../utils.js'
 import { useToast } from '../App.jsx'
+import VariantAttributeManager from '../components/VariantAttributeManager.jsx'
+import VariantTable from '../components/VariantTable.jsx'
 
 const CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud', 'jpy']
 
@@ -14,6 +16,9 @@ const EMPTY_FORM = {
   currency: 'usd',
   images: [],
   metadata: [],
+  has_variants: false,
+  variant_attributes: [],
+  variants: [],
   stock: '-1',
   active: true,
 }
@@ -68,6 +73,8 @@ export default function ProductForm() {
       setStripePriceId(p.stripe_price_id)
       setCreatedAt(p.created_at)
       setUpdatedAt(p.updated_at)
+
+      const hasVariants = (p.variants?.length ?? 0) > 0
       setForm({
         name: p.name ?? '',
         description: p.description ?? '',
@@ -75,6 +82,9 @@ export default function ProductForm() {
         currency: p.currency ?? 'usd',
         images: p.images ?? [],
         metadata: metadataToList(p.metadata),
+        has_variants: hasVariants,
+        variant_attributes: p.variant_attributes ?? [],
+        variants: p.variants ?? [],
         stock: String(p.stock ?? -1),
         active: p.active ?? true,
       })
@@ -131,9 +141,36 @@ export default function ProductForm() {
     const priceVal = parsePriceInput(form.price)
     if (isNaN(priceVal) || priceVal < 1) errs.price = 'Enter a valid price (e.g. 29.99).'
     if (!form.currency || form.currency.length !== 3) errs.currency = 'Currency must be 3 characters.'
-    const stockVal = parseInt(form.stock, 10)
-    if (isNaN(stockVal) || (stockVal !== -1 && stockVal < 0))
-      errs.stock = 'Stock must be -1 (unlimited) or 0 or higher.'
+
+    if (form.has_variants) {
+      // Validate variant mode
+      if (!form.variant_attributes.length) {
+        errs.variant_attributes = 'Define at least one attribute.'
+      }
+      if (!form.variants.length) {
+        errs.variants = 'Add at least one variant.'
+      }
+
+      // Validate each variant
+      form.variants.forEach((v, idx) => {
+        if (!v.sku?.trim()) {
+          errs[`variant_${idx}_sku`] = 'SKU is required.'
+        }
+
+        const requiredAttrs = form.variant_attributes.filter((a) => a.required)
+        for (const attr of requiredAttrs) {
+          if (!v.attributes?.[attr.id]?.trim?.()) {
+            errs[`variant_${idx}_attr_${attr.id}`] = `${attr.name} is required.`
+          }
+        }
+      })
+    } else {
+      // Legacy stock validation
+      const stockVal = parseInt(form.stock, 10)
+      if (isNaN(stockVal) || (stockVal !== -1 && stockVal < 0))
+        errs.stock = 'Stock must be -1 (unlimited) or 0 or higher.'
+    }
+
     return errs
   }
 
@@ -155,8 +192,19 @@ export default function ProductForm() {
         currency: form.currency.toLowerCase(),
         images: form.images.map((u) => u.trim()).filter(Boolean),
         metadata: listToMetadata(form.metadata),
-        stock: parseInt(form.stock, 10),
         active: form.active,
+      }
+
+      // Add variant data or legacy stock based on mode
+      if (form.has_variants) {
+        payload.variant_attributes = form.variant_attributes
+        payload.variants = form.variants.map((v) => ({
+          ...v,
+          price: v.price ? parsePriceInput(String(v.price)) : payload.price,
+          stock: parseInt(v.stock, 10),
+        }))
+      } else {
+        payload.stock = parseInt(form.stock, 10)
       }
 
       if (isEditing) {
@@ -323,6 +371,49 @@ export default function ProductForm() {
               </button>
             </div>
 
+            {/* Variant Attributes */}
+            <div className="card p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.has_variants}
+                    onChange={(e) => {
+                      setField('has_variants', e.target.checked)
+                      if (e.target.checked) {
+                        // Clear stock when enabling variants
+                        setField('stock', '-1')
+                      }
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium text-gray-700">This product has variations</span>
+                </label>
+              </div>
+
+              {form.has_variants && (
+                <VariantAttributeManager
+                  attributes={form.variant_attributes}
+                  onUpdate={(attrs) => setField('variant_attributes', attrs)}
+                  errors={errors}
+                />
+              )}
+            </div>
+
+            {/* Variants Table */}
+            {form.has_variants && (
+              <div className="card p-5">
+                <VariantTable
+                  variants={form.variants}
+                  attributes={form.variant_attributes}
+                  basePrice={parsePriceInput(form.price)}
+                  currency={form.currency}
+                  onUpdate={(vars) => setField('variants', vars)}
+                  errors={errors}
+                />
+              </div>
+            )}
+
             {/* Metadata */}
             <div className="card p-5 space-y-3">
               <div>
@@ -449,44 +540,78 @@ export default function ProductForm() {
               </div>
             </div>
 
-            {/* Stock */}
+            {/* Stock / Inventory */}
             <div className="card p-5 space-y-3">
               <h2 className="text-sm font-semibold text-gray-900">Inventory</h2>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                  Stock quantity
-                </label>
-                <input
-                  type="number"
-                  value={form.stock}
-                  onChange={(e) => setField('stock', e.target.value)}
-                  min="-1"
-                  step="1"
-                  className={`input ${errors.stock ? 'border-red-400 focus:ring-red-400' : ''}`}
-                />
-                {errors.stock && <p className="mt-1.5 text-xs text-red-500">{errors.stock}</p>}
-              </div>
-              <div className="grid grid-cols-3 gap-1.5">
-                {[{ label: 'Unlimited', value: '-1' }, { label: 'Sold out', value: '0' }, { label: '100', value: '100' }].map(
-                  ({ label, value }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setField('stock', value)}
-                      className={`text-xs py-1.5 px-2 rounded border transition-colors ${
-                        form.stock === value
-                          ? 'bg-gray-100 border-gray-400 text-gray-700 font-medium'
-                          : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  )
-                )}
-              </div>
-              <p className="text-xs text-gray-400">
-                Set to <code className="bg-gray-100 px-1 rounded">-1</code> for unlimited / not tracked.
-              </p>
+
+              {form.has_variants ? (
+                // Variants mode: show aggregate stock
+                <>
+                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <p className="text-xs text-blue-700">
+                      {form.variants.length === 0
+                        ? 'Add variants to manage inventory per size/color.'
+                        : `${form.variants.length} variant${form.variants.length !== 1 ? 's' : ''} active`}
+                    </p>
+                    {form.variants.length > 0 && (
+                      <div className="mt-2 space-y-1 text-xs text-blue-600">
+                        <p>
+                          Total:{' '}
+                          {(() => {
+                            const stock = calculateProductStock({ variants: form.variants, active: true })
+                            if (stock === -1) return 'Unlimited'
+                            if (stock === 0) return 'Sold out'
+                            return `${stock} in stock`
+                          })()}
+                        </p>
+                        <p>
+                          Breakdown: {form.variants.filter((v) => v.stock > 0).length} in stock,{' '}
+                          {form.variants.filter((v) => v.stock === 0).length} sold out
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                // Legacy mode: simple stock input
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                      Stock quantity
+                    </label>
+                    <input
+                      type="number"
+                      value={form.stock}
+                      onChange={(e) => setField('stock', e.target.value)}
+                      min="-1"
+                      step="1"
+                      className={`input ${errors.stock ? 'border-red-400 focus:ring-red-400' : ''}`}
+                    />
+                    {errors.stock && <p className="mt-1.5 text-xs text-red-500">{errors.stock}</p>}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[{ label: 'Unlimited', value: '-1' }, { label: 'Sold out', value: '0' }, { label: '100', value: '100' }].map(
+                      ({ label, value }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setField('stock', value)}
+                          className={`text-xs py-1.5 px-2 rounded border transition-colors ${
+                            form.stock === value
+                              ? 'bg-gray-100 border-gray-400 text-gray-700 font-medium'
+                              : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Set to <code className="bg-gray-100 px-1 rounded">-1</code> for unlimited / not tracked.
+                  </p>
+                </>
+              )}
             </div>
 
             {/* Stripe info (edit only) */}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, RefreshCw, ChevronLeft, ChevronRight, Search, Package } from 'lucide-react'
 import { api } from '../api.js'
-import { formatPrice } from '../utils.js'
+import { formatPrice, calculateProductStock } from '../utils.js'
 import { StatusBadge, StockBadge } from '../components/Badge.jsx'
 import ConfirmModal from '../components/ConfirmModal.jsx'
 import { useToast } from '../App.jsx'
@@ -278,7 +278,7 @@ export default function ProductList() {
 
                     {/* Stock */}
                     <td className="px-4 py-3">
-                      <StockBadge stock={product.stock} />
+                      <StockBadge stock={calculateProductStock(product)} />
                     </td>
 
                     {/* Actions */}

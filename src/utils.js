@@ -60,3 +60,44 @@ export function getStockStatus(stock) {
   if (stock >= 1 && stock <= 4) return 'low'
   return 'in_stock'
 }
+
+/**
+ * Calculate product-level stock from variants.
+ * If product has variants: returns sum of active variant stocks (or -1 if any unlimited)
+ * If no variants: returns product.stock
+ */
+export function calculateProductStock(product) {
+  if (!product.variants?.length) {
+    return product.stock ?? -1
+  }
+
+  const activeVariants = product.variants.filter((v) => v.active)
+  if (!activeVariants.length) return 0
+
+  // If any active variant is unlimited, product is unlimited
+  if (activeVariants.some((v) => v.stock === -1)) return -1
+
+  // If all active variants are sold out, product is sold out
+  if (activeVariants.every((v) => v.stock === 0)) return 0
+
+  // Sum of all active variant stocks
+  return activeVariants.reduce((sum, v) => {
+    return v.stock === -1 ? sum : sum + v.stock
+  }, 0)
+}
+
+/**
+ * Generate variant display name from attributes object.
+ * {size: "M", color: "Blue"} → "M / Blue"
+ */
+export function generateVariantName(attributes) {
+  if (!attributes || !Object.keys(attributes).length) return 'Variant'
+  return Object.values(attributes).join(' / ')
+}
+
+/**
+ * Check if variant is available for purchase.
+ */
+export function isVariantAvailable(variant) {
+  return variant.active && (variant.stock > 0 || variant.stock === -1)
+}
