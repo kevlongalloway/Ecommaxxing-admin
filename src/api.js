@@ -1,3 +1,5 @@
+import { getToken, clearToken } from './auth.js'
+
 export class AdminApiError extends Error {
   constructor(message, status, details) {
     super(message)
@@ -7,22 +9,28 @@ export class AdminApiError extends Error {
   }
 }
 
-async function adminFetch(path, options = {}) {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL
-  const apiKey = import.meta.env.VITE_ADMIN_API_KEY
+function getBaseUrl() {
+  return import.meta.env.VITE_API_BASE_URL || ''
+}
 
-  const url = `${baseUrl}${path}`
+async function adminFetch(path, options = {}) {
+  const token = getToken()
+  const url = `${getBaseUrl()}${path}`
 
   const headers = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${apiKey}`,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers || {}),
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  })
+  const response = await fetch(url, { ...options, headers })
+
+  if (response.status === 401) {
+    clearToken()
+    // Hard redirect so the React tree re-mounts cleanly on login
+    window.location.href = '/login'
+    throw new AdminApiError('Session expired — please log in again', 401, null)
+  }
 
   if (!response.ok) {
     let details = null
@@ -32,13 +40,12 @@ async function adminFetch(path, options = {}) {
       // ignore parse errors
     }
     const message =
-      details?.message ||
       details?.error ||
+      details?.message ||
       `Request failed with status ${response.status}`
     throw new AdminApiError(message, response.status, details)
   }
 
-  // 204 No Content or DELETE responses may have no body
   if (response.status === 204 || response.headers.get('content-length') === '0') {
     return null
   }
@@ -46,8 +53,27 @@ async function adminFetch(path, options = {}) {
   const text = await response.text()
   if (!text) return null
 
-  return JSON.parse(text)
+  const body = JSON.parse(text)
+  // Unwrap the { ok, data } envelope when present
+  return body?.data !== undefined ? body.data : body
 }
+
+// ── Auth ───────────────────────────────────────────────────────────────────
+
+export async function login(username, password) {
+  const res = await fetch(`${getBaseUrl()}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  const body = await res.json()
+  if (!res.ok || !body.ok) {
+    throw new AdminApiError(body.error ?? 'Login failed', res.status, body.details)
+  }
+  return body.data // { token, expiresIn }
+}
+
+// ── Products ───────────────────────────────────────────────────────────────
 
 export const api = {
   listProducts: (params = {}) =>
