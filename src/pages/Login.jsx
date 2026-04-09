@@ -11,6 +11,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
+  const rawDebug = sessionStorage.getItem('auth_debug')
+  const debugInfo = rawDebug ? (() => { try { return JSON.parse(rawDebug) } catch { return null } })() : null
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError(null)
@@ -23,12 +26,9 @@ export default function Login() {
     setLoading(true)
     try {
       const token = await login(username.trim(), password)
-      console.log('[Login] token received, storing and navigating to /')
       setToken(token)
-      console.log('[Login] token stored in sessionStorage:', sessionStorage.getItem('ecommaxxing_admin_token') ? 'OK' : 'MISSING')
       navigate('/', { replace: true })
     } catch (err) {
-      console.error('[Login] login error:', err.message, err)
       setError(err.message || 'Login failed. Check your credentials.')
     } finally {
       setLoading(false)
@@ -45,6 +45,19 @@ export default function Login() {
           </div>
           <span className="text-xl font-bold text-gray-900">Ecommaxxing</span>
         </div>
+
+        {debugInfo && (
+          <div className="mb-4 rounded-lg bg-yellow-50 border border-yellow-300 p-3 text-xs text-yellow-900 font-mono break-all">
+            <div className="font-bold mb-1">Auth debug ({debugInfo.event})</div>
+            <pre className="whitespace-pre-wrap">{JSON.stringify(debugInfo, null, 2)}</pre>
+            <button
+              className="mt-2 text-yellow-700 underline text-xs"
+              onClick={() => { sessionStorage.removeItem('auth_debug'); window.location.reload() }}
+            >
+              dismiss
+            </button>
+          </div>
+        )}
 
         <div className="card p-8">
           <h1 className="text-lg font-semibold text-gray-900 mb-6 text-center">
