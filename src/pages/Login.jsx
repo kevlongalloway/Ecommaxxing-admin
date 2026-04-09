@@ -22,7 +22,7 @@ export default function Login() {
 
     setLoading(true)
     try {
-      const { token } = await login(username.trim(), password)
+      const token = await login(username.trim(), password)
       setToken(token)
       navigate('/', { replace: true })
     } catch (err) {
