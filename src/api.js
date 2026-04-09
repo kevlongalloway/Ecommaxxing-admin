@@ -70,7 +70,13 @@ export async function login(username, password) {
   if (!res.ok || !body.ok) {
     throw new AdminApiError(body.error ?? 'Login failed', res.status, body.details)
   }
-  return body.data // { token, expiresIn }
+  // Support both { data: { token } } and { data: "token-string" } response shapes
+  const data = body.data
+  const token = typeof data === 'string' ? data : data?.token
+  if (!token) {
+    throw new AdminApiError('Login failed: no token in response', res.status, body)
+  }
+  return token
 }
 
 // ── Products ───────────────────────────────────────────────────────────────
