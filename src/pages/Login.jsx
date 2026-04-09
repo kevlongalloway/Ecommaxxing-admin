@@ -23,9 +23,12 @@ export default function Login() {
     setLoading(true)
     try {
       const token = await login(username.trim(), password)
+      console.log('[Login] token received, storing and navigating to /')
       setToken(token)
+      console.log('[Login] token stored in sessionStorage:', sessionStorage.getItem('ecommaxxing_admin_token') ? 'OK' : 'MISSING')
       navigate('/', { replace: true })
     } catch (err) {
+      console.error('[Login] login error:', err.message, err)
       setError(err.message || 'Login failed. Check your credentials.')
     } finally {
       setLoading(false)

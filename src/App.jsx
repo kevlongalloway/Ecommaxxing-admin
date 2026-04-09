@@ -26,7 +26,10 @@ export function useAuth() {
 // ── Protected route wrapper ────────────────────────────────────────────────
 
 function RequireAuth({ children }) {
-  if (!isLoggedIn()) {
+  const loggedIn = isLoggedIn()
+  console.log('[RequireAuth] isLoggedIn:', loggedIn)
+  if (!loggedIn) {
+    console.warn('[RequireAuth] not logged in — redirecting to /login')
     return <Navigate to="/login" replace />
   }
   return children
